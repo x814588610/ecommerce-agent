@@ -46,6 +46,7 @@ class FakeModel:
         self.calls.append(messages)
         return self.responses.pop(0)
 
+
 class FakeVectorStore:
     """模拟商品向量存储。"""
 
@@ -66,6 +67,7 @@ class FakeVectorStore:
                 },
             )
         ]
+
 
 class FakePolicyVectorStore:
     """模拟售后政策向量存储。"""
@@ -89,6 +91,7 @@ class FakePolicyVectorStore:
         self.calls.append((query, limit))
         return self.results[:limit]
 
+
 def create_policy_result() -> PolicySearchResult:
     """创建测试用的售后政策结果。"""
 
@@ -111,7 +114,6 @@ def create_test_client(
 ) -> Iterator[TestClient]:
     """Create an API client with isolated database and fake model."""
 
-
     if vector_store is None:
         vector_store = FakeVectorStore()
 
@@ -126,8 +128,6 @@ def create_test_client(
         poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(test_engine)
-
-
 
     with Session(test_engine) as session:
         ProductRepository(session).add(
@@ -157,23 +157,16 @@ def create_test_client(
 
     def override_get_product_vector_store() -> FakeVectorStore:
         return vector_store
-    
+
     def override_get_policy_vector_store() -> FakePolicyVectorStore:
         return policy_vector_store
+
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_agent_model] = override_get_agent_model
-    app.dependency_overrides[get_conversation_memory] = (
-        override_get_conversation_memory
-    )
-    app.dependency_overrides[get_approval_store] = (
-        override_get_approval_store
-    )
-    app.dependency_overrides[get_product_vector_store] = (
-        override_get_product_vector_store
-    )
-    app.dependency_overrides[get_policy_vector_store] = (
-        override_get_policy_vector_store
-    )
+    app.dependency_overrides[get_conversation_memory] = override_get_conversation_memory
+    app.dependency_overrides[get_approval_store] = override_get_approval_store
+    app.dependency_overrides[get_product_vector_store] = override_get_product_vector_store
+    app.dependency_overrides[get_policy_vector_store] = override_get_policy_vector_store
     client = TestClient(app)
 
     try:
@@ -296,19 +289,13 @@ def test_chat_reuses_memory_for_same_session() -> None:
 
     assert first_response.status_code == 200
     assert second_response.status_code == 200
-    assert second_response.json()["answer"] == (
-        "第二轮回答：它的价格是 1999 元。"
-    )
+    assert second_response.json()["answer"] == ("第二轮回答：它的价格是 1999 元。")
 
-    second_call_contents = [
-        getattr(message, "content", "")
-        for message in model.calls[1]
-    ]
+    second_call_contents = [getattr(message, "content", "") for message in model.calls[1]]
 
     assert "我想找一部学习用的手机" in second_call_contents
     assert "第一轮回答：推荐学习手机。" in second_call_contents
     assert second_call_contents[-1] == "它的价格是多少？"
-
 
 
 def test_chat_blocks_high_risk_action_before_model() -> None:
@@ -341,7 +328,6 @@ def test_chat_blocks_high_risk_action_before_model() -> None:
     assert len(model.calls) == 0
 
 
-
 def test_chat_executes_semantic_product_tool() -> None:
     """聊天 Agent 应该能够执行商品语义搜索工具。"""
 
@@ -361,9 +347,7 @@ def test_chat_executes_semantic_product_tool() -> None:
                     }
                 ],
             ),
-            AIMessage(
-                content="我找到了一部适合学生学习的手机，价格是 1999 元。"
-            ),
+            AIMessage(content="我找到了一部适合学生学习的手机，价格是 1999 元。"),
         ]
     )
     vector_store = FakeVectorStore()
@@ -391,6 +375,7 @@ def test_chat_executes_semantic_product_tool() -> None:
     assert "phone-001" in model.calls[1][-1].content
     assert "0.93" in model.calls[1][-1].content
 
+
 def test_chat_executes_policy_tool() -> None:
     """聊天 Agent 应该能够执行售后政策搜索工具。"""
 
@@ -410,14 +395,10 @@ def test_chat_executes_policy_tool() -> None:
                     }
                 ],
             ),
-            AIMessage(
-                content="退款审核通过后，通常需要 3 到 7 个工作日到账。"
-            ),
+            AIMessage(content="退款审核通过后，通常需要 3 到 7 个工作日到账。"),
         ]
     )
-    policy_vector_store = FakePolicyVectorStore(
-        results=[create_policy_result()]
-    )
+    policy_vector_store = FakePolicyVectorStore(results=[create_policy_result()])
 
     with create_test_client(
         model,
@@ -444,6 +425,4 @@ def test_chat_executes_policy_tool() -> None:
     assert model.calls[1][-1].type == "tool"
     assert "退款政策" in model.calls[1][-1].content
     assert "3 到 7 个工作日" in model.calls[1][-1].content
-    assert policy_vector_store.calls == [
-        ("退款通常多久到账？", 3)
-    ]
+    assert policy_vector_store.calls == [("退款通常多久到账？", 3)]

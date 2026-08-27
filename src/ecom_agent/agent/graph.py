@@ -23,9 +23,8 @@ from ecom_agent.agent.telemetry import (
 from ecom_agent.llm.prompts import CUSTOMER_SERVICE_SYSTEM_PROMPT
 
 MAX_AGENT_STEPS = 6
-NO_RESULTS_ANSWER = (
-    "没有找到符合条件的商品，你可以调整关键词、品牌或价格范围后重试。"
-)
+NO_RESULTS_ANSWER = "没有找到符合条件的商品，你可以调整关键词、品牌或价格范围后重试。"
+
 
 def _has_tool_calls(message: object) -> bool:
     """检查模型是否请求调用工具。"""
@@ -40,6 +39,7 @@ def _content_to_text(content: object) -> str:
         return content
 
     return str(content)
+
 
 def _tool_result_is_empty(
     tool_name: str,
@@ -87,6 +87,7 @@ def _message_to_text(message: object) -> str:
 
     return content if isinstance(content, str) else str(content)
 
+
 def _latest_user_message(messages: Sequence[object]) -> str:
     """从消息历史中获取最近一条用户消息。"""
 
@@ -95,6 +96,7 @@ def _latest_user_message(messages: Sequence[object]) -> str:
             return _message_to_text(message)
 
     return ""
+
 
 def classify_intent_node(state: AgentState) -> dict[str, object]:
     """识别用户意图并写入 Agent 状态。"""
@@ -152,10 +154,7 @@ def build_commerce_graph(
     def agent_node(state: AgentState) -> dict[str, object]:
         """调用一次模型。"""
         intent = state.get("intent", "general")
-        system_content = (
-            f"{CUSTOMER_SERVICE_SYSTEM_PROMPT}\n\n"
-            f"当前请求意图：{intent}"
-        )
+        system_content = f"{CUSTOMER_SERVICE_SYSTEM_PROMPT}\n\n当前请求意图：{intent}"
         messages = [
             SystemMessage(content=system_content),
             *state.get("messages", []),
@@ -170,7 +169,7 @@ def build_commerce_graph(
             log_model_call(
                 tool_names=[tool.name for tool in tool_list],
                 elapsed_ms=(perf_counter() - started_at) * 1000,
-            ) 
+            )
         step_count = state.get("step_count", 0) + 1
 
         updates: dict[str, object] = {
@@ -182,13 +181,11 @@ def build_commerce_graph(
             updates["answer"] = _content_to_text(response.content)
 
         return updates
-    
+
     def disallowed_tool_node(state: AgentState) -> dict[str, object]:
         """阻止与当前意图不匹配的工具调用。"""
 
-        response = AIMessage(
-            content="当前请求与工具不匹配，我暂时无法执行该操作。"
-        )
+        response = AIMessage(content="当前请求与工具不匹配，我暂时无法执行该操作。")
 
         return {
             "messages": [response],
@@ -237,11 +234,7 @@ def build_commerce_graph(
                         success=True,
                     )
 
-                    result_text = (
-                        result
-                        if isinstance(result, str)
-                        else str(result)
-                    )
+                    result_text = result if isinstance(result, str) else str(result)
                     tool_messages.append(
                         ToolMessage(
                             content=result_text,
@@ -274,9 +267,7 @@ def build_commerce_graph(
     def max_steps_node(state: AgentState) -> dict[str, object]:
         """达到步数上限时返回安全回答。"""
 
-        response = AIMessage(
-            content="我暂时无法完成这次查询，请稍后重试。"
-        )
+        response = AIMessage(content="我暂时无法完成这次查询，请稍后重试。")
 
         return {
             "messages": [response],
@@ -293,10 +284,7 @@ def build_commerce_graph(
         last_message = messages[-1]
 
         if _has_tool_calls(last_message):
-            available_tool_names = [
-                tool.name
-                for tool in tool_list
-            ]
+            available_tool_names = [tool.name for tool in tool_list]
 
             if not _tool_calls_are_allowed(
                 message=last_message,
@@ -316,7 +304,7 @@ def build_commerce_graph(
         """工具成功时继续请求模型，失败时直接结束。"""
 
         if state.get("error") or state.get("answer"):
-                return END
+            return END
 
         return "agent"
 

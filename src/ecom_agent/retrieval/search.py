@@ -36,7 +36,7 @@ def search_products_semantically(
 
     if max_price is not None and max_price < 0:
         raise ValueError("Maximum price must not be negative.")
-    
+
     if category is None and brand is None and max_price is None:
         vector_results = vector_store.search(
             query=query,
@@ -73,7 +73,6 @@ def search_products_semantically(
 
         if max_price is not None and product.price > max_price:
             continue
-
 
         results.append(
             SemanticProductResult(

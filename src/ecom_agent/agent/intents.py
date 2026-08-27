@@ -20,7 +20,6 @@ def classify_intent(user_message: str) -> Intent:
     if not normalized_message:
         return "general"
 
-    
     policy_query_keywords = (
         "售后",
         "退款政策",
@@ -36,12 +35,8 @@ def classify_intent(user_message: str) -> Intent:
         "支持换货",
     )
 
-    if any(
-        keyword in normalized_message
-        for keyword in policy_query_keywords
-    ):
+    if any(keyword in normalized_message for keyword in policy_query_keywords):
         return "policy"
-
 
     inventory_query_keywords = (
         "库存吗",
@@ -57,10 +52,7 @@ def classify_intent(user_message: str) -> Intent:
         "查询库存",
     )
 
-    if any(
-        keyword in normalized_message
-        for keyword in inventory_query_keywords
-    ):
+    if any(keyword in normalized_message for keyword in inventory_query_keywords):
         return "inventory"
 
     if any(
@@ -76,7 +68,6 @@ def classify_intent(user_message: str) -> Intent:
         return "semantic_search"
 
     return "general"
-
 
 
 TOOL_NAMES_BY_INTENT: dict[Intent, frozenset[str]] = {
