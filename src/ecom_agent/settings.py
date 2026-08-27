@@ -1,4 +1,4 @@
-"""Application configuration."""
+"""应用配置。"""
 
 from functools import lru_cache
 
@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Configuration loaded from environment variables and .env."""
+    """从环境变量和 .env 文件加载的应用配置。"""
 
     app_name: str = "E-commerce Agent"
     app_env: str = "development"
@@ -15,8 +15,10 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./data/ecommerce.db"
 
-    qdrant_url: str = "http://localhost:6333"
+    qdrant_url: str = ""
+    qdrant_path: str = "data/qdrant"
     qdrant_collection: str = "products"
+    qdrant_policy_collection: str = "policies"
 
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
@@ -31,6 +33,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return the cached application settings."""
+    """返回缓存的应用配置。"""
 
     return Settings()

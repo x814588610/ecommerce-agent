@@ -1,4 +1,4 @@
-"""LangChain tools for commerce operations."""
+"""电商业务的 LangChain 工具。"""
 
 import json
 from decimal import Decimal
@@ -9,10 +9,19 @@ from sqlmodel import Session
 
 from ecom_agent.commerce.models import ProductRecord
 from ecom_agent.commerce.repository import ProductRepository
+from ecom_agent.retrieval.policy_vector_store import (
+    PolicySearchResult,
+    PolicyVectorStore,
+)
+from ecom_agent.retrieval.search import (
+    SemanticProductResult,
+    search_products_semantically,
+)
+from ecom_agent.retrieval.vector_store import ProductVectorStore
 
 
 class ProductSearchToolInput(BaseModel):
-    """Input parameters accepted by the product search tool."""
+    """商品搜索工具接受的输入参数。"""
 
     query: str = Field(
         default="",
@@ -36,17 +45,31 @@ class ProductSearchToolInput(BaseModel):
         description="Whether to exclude out-of-stock products.",
     )
 
+
 class ProductIdToolInput(BaseModel):
-    """Input parameters accepted by product ID tools."""
+    """商品 ID 工具接受的输入参数。"""
 
     product_id: str = Field(
         min_length=1,
         description="The unique product ID.",
     )
 
+class PolicySearchToolInput(BaseModel):
+    """售后政策搜索工具接受的输入参数。"""
+
+    query: str = Field(
+        min_length=1,
+        description="用户关于退货、换货、退款或保修的问题。",
+    )
+    limit: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="最多返回的政策数量。",
+    )
 
 def _serialize_product(record: ProductRecord) -> dict[str, object]:
-    """Convert a database record into JSON-compatible data."""
+    """将数据库记录转换为 JSON 兼容的数据。"""
 
     return {
         "product_id": record.product_id,
@@ -59,8 +82,21 @@ def _serialize_product(record: ProductRecord) -> dict[str, object]:
         "tags": json.loads(record.tags_json),
     }
 
+def _serialize_policy_result(
+    result: PolicySearchResult,
+) -> dict[str, object]:
+    """将政策搜索结果转换为 JSON 兼容的数据。"""
+
+    return {
+        "policy_id": result.policy_id,
+        "title": result.payload.get("title", ""),
+        "content": result.payload.get("content", ""),
+        "score": result.score,
+        "source": result.payload.get("source", ""),
+    }
+
 def _product_not_found(product_id: str) -> str:
-    """Return a machine-readable missing-product result."""
+    """返回机器可读的商品不存在结果。"""
 
     return json.dumps(
         {
@@ -70,8 +106,9 @@ def _product_not_found(product_id: str) -> str:
         ensure_ascii=False,
     )
 
+
 def create_product_search_tool(session: Session) -> StructuredTool:
-    """Create a LangChain tool backed by a database session."""
+    """创建一个由数据库会话支持的 LangChain 工具。"""
 
     repository = ProductRepository(session)
 
@@ -83,7 +120,7 @@ def create_product_search_tool(session: Session) -> StructuredTool:
         max_price: Decimal | None = None,
         only_in_stock: bool = True,
     ) -> str:
-        """Search products by keywords, category, brand, price, and stock."""
+        """按关键词、类别、品牌、价格和库存搜索商品。"""
 
         records = repository.search(
             query=query,
@@ -100,13 +137,13 @@ def create_product_search_tool(session: Session) -> StructuredTool:
 
 
 def create_product_detail_tool(session: Session) -> StructuredTool:
-    """Create a LangChain tool for retrieving product details."""
+    """创建一个用于获取商品详情的 LangChain 工具。"""
 
     repository = ProductRepository(session)
 
     @tool(args_schema=ProductIdToolInput)
     def get_product_detail(product_id: str) -> str:
-        """Return complete details for one product."""
+        """返回一个商品的完整详情。"""
 
         record = repository.get_by_id(product_id)
 
@@ -122,13 +159,13 @@ def create_product_detail_tool(session: Session) -> StructuredTool:
 
 
 def create_inventory_tool(session: Session) -> StructuredTool:
-    """Create a LangChain tool for checking product inventory."""
+    """创建一个用于查询商品库存的 LangChain 工具。"""
 
     repository = ProductRepository(session)
 
     @tool(args_schema=ProductIdToolInput)
     def check_inventory(product_id: str) -> str:
-        """Return the current stock status for one product."""
+        """返回一个商品的当前库存状态。"""
 
         record = repository.get_by_id(product_id)
 
@@ -144,3 +181,117 @@ def create_inventory_tool(session: Session) -> StructuredTool:
         return json.dumps(inventory, ensure_ascii=False)
 
     return check_inventory
+
+def create_policy_search_tool(
+    vector_store: PolicyVectorStore,
+) -> StructuredTool:
+    """创建一个用于搜索售后政策的 LangChain 工具。"""
+
+    @tool(args_schema=PolicySearchToolInput)
+    def search_policy(
+        query: str,
+        limit: int = 5,
+    ) -> str:
+        """根据用户问题搜索相关售后政策。"""
+
+        results = vector_store.search(
+            query=query,
+            limit=limit,
+        )
+        items = [
+            _serialize_policy_result(result)
+            for result in results
+        ]
+
+        return json.dumps(
+            {
+                "items": items,
+                "total": len(items),
+            },
+            ensure_ascii=False,
+        )
+
+    return search_policy
+
+class SemanticProductSearchToolInput(BaseModel):
+    """商品语义搜索工具接受的输入参数。"""
+
+    query: str = Field(
+        min_length=1,
+        description="用户对商品需求的自然语言描述。",
+    )
+    category: str | None = Field(
+        default=None,
+        description="商品类别，例如手机或电脑。",
+    )
+    brand: str | None = Field(
+        default=None,
+        description="商品品牌。",
+    )
+    max_price: Decimal | None = Field(
+        default=None,
+        ge=0,
+        description="用户能够接受的最高价格。",
+    )
+    limit: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="最多返回的商品数量。",
+    )
+    only_in_stock: bool = Field(
+        default=True,
+        description="是否排除缺货商品。",
+    )
+
+
+def _serialize_semantic_result(
+    result: SemanticProductResult,
+) -> dict[str, object]:
+    """将语义搜索结果转换为 JSON 兼容的数据。"""
+
+    return {
+        "product": _serialize_product(result.product),
+        "score": result.score,
+        "source": result.source,
+    }
+
+
+def create_semantic_product_search_tool(
+    session: Session,
+    vector_store: ProductVectorStore,
+) -> StructuredTool:
+    """创建一个用于商品语义搜索的 LangChain 工具。"""
+
+    @tool(args_schema=SemanticProductSearchToolInput)
+    def semantic_search_products(
+        query: str,
+        category: str | None = None,
+        brand: str | None = None,
+        max_price: Decimal | None = None,
+        limit: int = 5,
+        only_in_stock: bool = True,
+    ) -> str:
+        """根据用户自然语言需求搜索相关商品。"""
+
+        results = search_products_semantically(
+            session=session,
+            vector_store=vector_store,
+            query=query,
+            limit=limit,
+            only_in_stock=only_in_stock,
+            category=category,
+            brand=brand,
+            max_price=max_price,
+        )
+        items = [_serialize_semantic_result(result) for result in results]
+
+        return json.dumps(
+            {
+                "items": items,
+                "total": len(items),
+            },
+            ensure_ascii=False,
+        )
+
+    return semantic_search_products

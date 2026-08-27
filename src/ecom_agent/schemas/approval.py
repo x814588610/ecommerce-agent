@@ -1,4 +1,4 @@
-"""Approval request and response schemas."""
+"""审批请求和响应模型。"""
 
 from pydantic import BaseModel, Field
 
@@ -6,7 +6,7 @@ from ecom_agent.agent.approval import ApprovalStatus
 
 
 class ApprovalDecisionRequest(BaseModel):
-    """Decision submitted by a human reviewer."""
+    """人工审核者提交的决定。"""
 
     approved: bool = Field(
         description="Whether the approval request is approved.",
@@ -14,7 +14,7 @@ class ApprovalDecisionRequest(BaseModel):
 
 
 class ApprovalResponse(BaseModel):
-    """Approval request returned by the API."""
+    """API 返回的审批请求。"""
 
     approval_id: str = Field(
         min_length=1,

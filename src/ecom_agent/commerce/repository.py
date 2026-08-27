@@ -1,4 +1,4 @@
-"""Database operations for products."""
+"""商品数据库操作。"""
 
 from decimal import Decimal
 
@@ -8,15 +8,15 @@ from ecom_agent.commerce.models import ProductRecord
 
 
 class ProductRepository:
-    """Provide database operations for products."""
+    """提供商品数据库操作。"""
 
     def __init__(self, session: Session) -> None:
-        """Store the database session used by this repository."""
+        """保存仓库使用的数据库会话。"""
 
         self.session = session
 
     def add(self, product: ProductRecord) -> ProductRecord:
-        """Save one product and return the saved object."""
+        """保存一个商品并返回保存后的对象。"""
 
         self.session.add(product)
         self.session.commit()
@@ -24,12 +24,12 @@ class ProductRepository:
         return product
 
     def get_by_id(self, product_id: str) -> ProductRecord | None:
-        """Return one product by ID, or None if it does not exist."""
+        """根据 ID 返回商品；不存在时返回 None。"""
 
         return self.session.get(ProductRecord, product_id)
 
     def list_all(self) -> list[ProductRecord]:
-        """Return all products sorted by name."""
+        """返回按名称排序的所有商品。"""
 
         statement = select(ProductRecord).order_by(ProductRecord.name)
         return list(self.session.exec(statement).all())
@@ -42,7 +42,7 @@ class ProductRepository:
         max_price: Decimal | None = None,
         only_in_stock: bool = True,
     ) -> list[ProductRecord]:
-        """Search products with optional filters."""
+        """使用可选条件搜索商品。"""
 
         statement = select(ProductRecord)
 

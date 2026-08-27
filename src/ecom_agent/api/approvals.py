@@ -1,4 +1,4 @@
-"""Human approval API routes."""
+"""人工审批 API 路由。"""
 
 from typing import Annotated
 
@@ -21,7 +21,7 @@ router = APIRouter(
 
 
 def _to_response(approval: ApprovalRequest) -> ApprovalResponse:
-    """Convert an approval record into an API response."""
+    """将审批记录转换为 API 响应。"""
 
     return ApprovalResponse(
         approval_id=approval.approval_id,
@@ -37,7 +37,7 @@ def get_approval(
     approval_id: str,
     store: Annotated[ApprovalStore, Depends(get_approval_store)],
 ) -> ApprovalResponse:
-    """Return one approval request."""
+    """返回一个审批请求。"""
 
     approval = store.get(approval_id)
 
@@ -59,7 +59,7 @@ def decide_approval(
     request: ApprovalDecisionRequest,
     store: Annotated[ApprovalStore, Depends(get_approval_store)],
 ) -> ApprovalResponse:
-    """Approve or reject one pending request."""
+    """批准或拒绝一个待处理请求。"""
 
     approval = store.decide(
         approval_id=approval_id,

@@ -19,13 +19,22 @@ def create_test_session() -> Session:
 
 
 def test_create_commerce_tools_returns_all_tools() -> None:
-    """The registry should return all commerce tools in order."""
+    """The registry should return all tools in order."""
 
     with create_test_session() as session:
-        tools = create_commerce_tools(session)
+        fake_vector_store = object()
+        fake_policy_vector_store = object()
+
+        tools = create_commerce_tools(
+            session,
+            fake_vector_store,
+            fake_policy_vector_store,
+        )
 
     assert [tool.name for tool in tools] == [
         "search_products",
+        "semantic_search_products",
         "get_product_detail",
         "check_inventory",
+        "search_policy",
     ]

@@ -1,4 +1,4 @@
-"""Product request and response schemas."""
+"""商品请求和响应模型。"""
 
 from decimal import Decimal
 
@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class Product(BaseModel):
-    """A product displayed by the commerce system."""
+    """电商系统展示的商品。"""
     product_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     category: str = Field(min_length=1)
@@ -18,7 +18,7 @@ class Product(BaseModel):
 
 
 class ProductSearchRequest(BaseModel):
-    """Filters accepted by the product search endpoint."""
+    """商品搜索接口接受的过滤条件。"""
 
     query: str = Field(min_length=1)
     category: str | None = None
@@ -28,7 +28,23 @@ class ProductSearchRequest(BaseModel):
 
 
 class ProductSearchResponse(BaseModel):
-    """A product search result page."""
+    """结构化商品搜索结果页。"""
 
     items: list[Product]
+    total: int = Field(ge=0)
+
+
+class SemanticProductItem(BaseModel):
+    """带有语义相似度和检索来源的商品。"""
+
+    product: Product
+    score: float
+    source: str = Field(min_length=1)
+
+
+
+class SemanticProductSearchResponse(BaseModel):
+    """商品语义搜索结果页。"""
+
+    items: list[SemanticProductItem]
     total: int = Field(ge=0)

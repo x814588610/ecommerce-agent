@@ -1,4 +1,4 @@
-"""HTTP API entrypoint."""
+"""HTTP API 入口。"""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -11,6 +11,7 @@ from ecom_agent.api.chat import router as chat_router
 from ecom_agent.api.products import router as products_router
 from ecom_agent.commerce.database import create_db_and_tables, engine
 from ecom_agent.commerce.seed import seed_products
+from ecom_agent.logging_config import setup_logging
 from ecom_agent.settings import get_settings
 
 settings = get_settings()
@@ -19,8 +20,9 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Initialize resources when the application starts."""
+    """应用启动时初始化资源。"""
 
+    setup_logging()
     create_db_and_tables()
 
     with Session(engine) as session:
@@ -42,7 +44,7 @@ app.include_router(approvals_router)
 
 @app.get("/health", tags=["system"])
 def health_check() -> dict[str, str]:
-    """Return the service health status."""
+    """返回服务健康状态。"""
 
     return {
         "status": "ok",

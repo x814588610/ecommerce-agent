@@ -1,4 +1,4 @@
-"""Prompt templates for the commerce agent."""
+"""电商 Agent 的 Prompt 模板。"""
 
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -24,7 +24,7 @@ CUSTOMER_SERVICE_SYSTEM_PROMPT = """
 
 
 def create_customer_service_prompt() -> ChatPromptTemplate:
-    """Create the prompt template used by the commerce agent."""
+    """创建电商 Agent 使用的 Prompt 模板。"""
 
     return ChatPromptTemplate.from_messages(
         [

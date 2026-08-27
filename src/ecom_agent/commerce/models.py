@@ -4,7 +4,7 @@ from sqlmodel import Field, SQLModel
 
 
 class ProductRecord(SQLModel, table=True):
-    """A product stored in the local SQLite database."""
+    """存储在本地 SQLite 数据库中的商品。"""
 
     __tablename__ = "products"
 

@@ -1,4 +1,4 @@
-"""Safety policies for agent requests."""
+"""Agent 请求的安全策略。"""
 
 from typing import Literal
 
@@ -23,7 +23,7 @@ HIGH_RISK_ACTIONS = (
 
 
 def assess_risk(user_message: str) -> tuple[RiskLevel, bool]:
-    """Assess whether a message requires human approval."""
+    """判断消息是否需要人工审批。"""
 
     normalized_message = " ".join(user_message.strip().split())
 

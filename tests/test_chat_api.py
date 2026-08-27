@@ -20,6 +20,12 @@ from ecom_agent.api.main import app
 from ecom_agent.commerce.database import get_session
 from ecom_agent.commerce.models import ProductRecord
 from ecom_agent.commerce.repository import ProductRepository
+from ecom_agent.retrieval.factory import (
+    get_policy_vector_store,
+    get_product_vector_store,
+)
+from ecom_agent.retrieval.policy_vector_store import PolicySearchResult
+from ecom_agent.retrieval.vector_store import ProductSearchResult
 
 
 class FakeModel:
@@ -40,10 +46,78 @@ class FakeModel:
         self.calls.append(messages)
         return self.responses.pop(0)
 
+class FakeVectorStore:
+    """模拟商品向量存储。"""
+
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+        only_in_stock: bool = True,
+    ) -> list[ProductSearchResult]:
+        """返回固定的商品语义搜索结果。"""
+
+        return [
+            ProductSearchResult(
+                product_id="phone-001",
+                score=0.93,
+                payload={
+                    "product_id": "phone-001",
+                },
+            )
+        ]
+
+class FakePolicyVectorStore:
+    """模拟售后政策向量存储。"""
+
+    def __init__(
+        self,
+        results: list[PolicySearchResult] | None = None,
+    ) -> None:
+        """保存测试用的政策结果。"""
+
+        self.results = results or []
+        self.calls: list[tuple[str, int]] = []
+
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+    ) -> list[PolicySearchResult]:
+        """记录搜索参数并返回固定结果。"""
+
+        self.calls.append((query, limit))
+        return self.results[:limit]
+
+def create_policy_result() -> PolicySearchResult:
+    """创建测试用的售后政策结果。"""
+
+    return PolicySearchResult(
+        policy_id="refund-policy",
+        score=0.94,
+        payload={
+            "title": "退款政策",
+            "content": "退货审核通过后，原路退款通常需要 3 到 7 个工作日到账。",
+            "source": "本地售后政策",
+        },
+    )
+
 
 @contextmanager
-def create_test_client(model: FakeModel) -> Iterator[TestClient]:
+def create_test_client(
+    model: FakeModel,
+    vector_store: FakeVectorStore | None = None,
+    policy_vector_store: FakePolicyVectorStore | None = None,
+) -> Iterator[TestClient]:
     """Create an API client with isolated database and fake model."""
+
+
+    if vector_store is None:
+        vector_store = FakeVectorStore()
+
+    if policy_vector_store is None:
+        policy_vector_store = FakePolicyVectorStore()
+
     test_approval_store = ApprovalStore()
     test_memory = ConversationMemory()
     test_engine = create_engine(
@@ -52,6 +126,8 @@ def create_test_client(model: FakeModel) -> Iterator[TestClient]:
         poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(test_engine)
+
+
 
     with Session(test_engine) as session:
         ProductRepository(session).add(
@@ -78,6 +154,12 @@ def create_test_client(model: FakeModel) -> Iterator[TestClient]:
 
     def override_get_conversation_memory() -> ConversationMemory:
         return test_memory
+
+    def override_get_product_vector_store() -> FakeVectorStore:
+        return vector_store
+    
+    def override_get_policy_vector_store() -> FakePolicyVectorStore:
+        return policy_vector_store
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_agent_model] = override_get_agent_model
     app.dependency_overrides[get_conversation_memory] = (
@@ -86,7 +168,12 @@ def create_test_client(model: FakeModel) -> Iterator[TestClient]:
     app.dependency_overrides[get_approval_store] = (
         override_get_approval_store
     )
-
+    app.dependency_overrides[get_product_vector_store] = (
+        override_get_product_vector_store
+    )
+    app.dependency_overrides[get_policy_vector_store] = (
+        override_get_policy_vector_store
+    )
     client = TestClient(app)
 
     try:
@@ -252,3 +339,111 @@ def test_chat_blocks_high_risk_action_before_model() -> None:
     assert data["approval_required"] is True
     assert data["approval_id"].startswith("approval-")
     assert len(model.calls) == 0
+
+
+
+def test_chat_executes_semantic_product_tool() -> None:
+    """聊天 Agent 应该能够执行商品语义搜索工具。"""
+
+    model = FakeModel(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "semantic_search_products",
+                        "args": {
+                            "query": "适合学生学习的手机",
+                            "limit": 3,
+                        },
+                        "id": "semantic-call-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content="我找到了一部适合学生学习的手机，价格是 1999 元。"
+            ),
+        ]
+    )
+    vector_store = FakeVectorStore()
+
+    with create_test_client(model, vector_store) as client:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "推荐适合学生学习的手机",
+                "session_id": "semantic-session",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "我找到了一部适合学生学习的手机，价格是 1999 元。",
+        "session_id": "semantic-session",
+        "step_count": 2,
+        "risk_level": "low",
+        "approval_required": False,
+        "approval_id": None,
+    }
+    assert len(model.calls) == 2
+    assert model.calls[1][-1].type == "tool"
+    assert "phone-001" in model.calls[1][-1].content
+    assert "0.93" in model.calls[1][-1].content
+
+def test_chat_executes_policy_tool() -> None:
+    """聊天 Agent 应该能够执行售后政策搜索工具。"""
+
+    model = FakeModel(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "search_policy",
+                        "args": {
+                            "query": "退款通常多久到账？",
+                            "limit": 3,
+                        },
+                        "id": "policy-call-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content="退款审核通过后，通常需要 3 到 7 个工作日到账。"
+            ),
+        ]
+    )
+    policy_vector_store = FakePolicyVectorStore(
+        results=[create_policy_result()]
+    )
+
+    with create_test_client(
+        model,
+        policy_vector_store=policy_vector_store,
+    ) as client:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "退款通常多久到账？",
+                "session_id": "policy-session",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "退款审核通过后，通常需要 3 到 7 个工作日到账。",
+        "session_id": "policy-session",
+        "step_count": 2,
+        "risk_level": "low",
+        "approval_required": False,
+        "approval_id": None,
+    }
+    assert len(model.calls) == 2
+    assert model.calls[1][-1].type == "tool"
+    assert "退款政策" in model.calls[1][-1].content
+    assert "3 到 7 个工作日" in model.calls[1][-1].content
+    assert policy_vector_store.calls == [
+        ("退款通常多久到账？", 3)
+    ]

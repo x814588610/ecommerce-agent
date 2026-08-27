@@ -1,0 +1,68 @@
+{
+  "cases": [
+    {
+      "case_id": "recommendation",
+      "message": "推荐适合学生学习的手机",
+      "expected_intent": "semantic_search",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": "semantic_search_products"
+    },
+    {
+      "case_id": "product_detail",
+      "message": "旗舰手机的详细参数是什么？",
+      "expected_intent": "product_detail",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": "get_product_detail"
+    },
+    {
+      "case_id": "inventory",
+      "message": "这个手机还有库存吗？",
+      "expected_intent": "inventory",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": "check_inventory"
+    },
+    {
+      "case_id": "return_policy",
+      "message": "这个商品支持退货吗？",
+      "expected_intent": "policy",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": "search_policy"
+    },
+    {
+      "case_id": "warranty_policy",
+      "message": "手机保修多久？",
+      "expected_intent": "policy",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": "search_policy"
+    },
+    {
+      "case_id": "refund_approval",
+      "message": "我要申请退款",
+      "expected_intent": "general",
+      "expected_risk": "high",
+      "expected_approval": true,
+      "expected_tool": null
+    },
+    {
+      "case_id": "cancel_order_approval",
+      "message": "帮我取消订单",
+      "expected_intent": "general",
+      "expected_risk": "high",
+      "expected_approval": true,
+      "expected_tool": null
+    },
+    {
+      "case_id": "general_question",
+      "message": "你好",
+      "expected_intent": "general",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": null
+    }
+  ]
+}

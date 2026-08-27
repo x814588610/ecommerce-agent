@@ -1,4 +1,4 @@
-"""Factory functions for language models."""
+"""大语言模型工厂函数。"""
 
 from langchain_openai import ChatOpenAI
 
@@ -6,7 +6,7 @@ from ecom_agent.settings import Settings, get_settings
 
 
 def create_chat_model(settings: Settings | None = None) -> ChatOpenAI:
-    """Create a chat model using the application settings."""
+    """根据应用配置创建聊天模型。"""
 
     app_settings = settings if settings is not None else get_settings()
     api_key = app_settings.llm_api_key.get_secret_value().strip()

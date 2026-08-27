@@ -1,4 +1,4 @@
-"""Seed the local database with demo products."""
+"""使用演示商品填充本地数据库。"""
 
 from decimal import Decimal
 
@@ -9,7 +9,7 @@ from ecom_agent.commerce.repository import ProductRepository
 
 
 def seed_products(session: Session) -> int:
-    """Insert demo products when the database is empty."""
+    """数据库为空时插入演示商品。"""
 
     repository = ProductRepository(session)
 

@@ -1,4 +1,4 @@
-"""Database connection and session management."""
+"""数据库连接和会话管理。"""
 
 from collections.abc import Generator
 from pathlib import Path
@@ -12,7 +12,7 @@ settings = get_settings()
 
 
 def _ensure_sqlite_directory(database_url: str) -> None:
-    """Create the parent directory for a local SQLite database."""
+    """为本地 SQLite 数据库创建父目录。"""
 
     if not database_url.startswith("sqlite:///"):
         return
@@ -31,13 +31,13 @@ engine = create_engine(
 
 
 def create_db_and_tables() -> None:
-    """Create all database tables if they do not already exist."""
+    """如果数据库表不存在则创建全部表。"""
 
     ProductRecord.metadata.create_all(engine)
 
 
 def get_session() -> Generator[Session, None, None]:
-    """Provide one database session for a request."""
+    """为一次请求提供一个数据库会话。"""
 
     with Session(engine) as session:
         yield session

@@ -1,4 +1,4 @@
-"""State definitions for the commerce agent."""
+"""电商 Agent 的状态定义。"""
 
 from typing import Annotated, TypedDict
 
@@ -7,7 +7,7 @@ from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict, total=False):
-    """Shared state passed between LangGraph nodes."""
+    """在 LangGraph 节点之间传递的共享状态。"""
 
     messages: Annotated[list[AnyMessage], add_messages]
     user_id: str
@@ -27,7 +27,7 @@ def create_initial_state(
     session_id: str = "default-session",
     user_id: str = "anonymous",
 ) -> AgentState:
-    """Create a fully initialized state for a new conversation."""
+    """为新会话创建完整的初始化状态。"""
 
     return {
         "messages": [

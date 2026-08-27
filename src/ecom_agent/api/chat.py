@@ -1,4 +1,4 @@
-"""Chat API routes."""
+"""聊天 API 路由。"""
 
 import logging
 from collections.abc import Callable
@@ -17,6 +17,12 @@ from ecom_agent.agent.registry import create_commerce_tools
 from ecom_agent.agent.state import AgentState, create_initial_state
 from ecom_agent.commerce.database import get_session
 from ecom_agent.llm.factory import create_chat_model
+from ecom_agent.retrieval.factory import (
+    get_policy_vector_store,
+    get_product_vector_store,
+)
+from ecom_agent.retrieval.policy_vector_store import PolicyVectorStore
+from ecom_agent.retrieval.vector_store import ProductVectorStore
 from ecom_agent.schemas.message import ChatRequest, ChatResponse
 
 ModelFactory = Callable[[], BaseChatModel]
@@ -32,19 +38,19 @@ approval_store = ApprovalStore()
 
 
 def get_agent_model() -> ModelFactory:
-    """Return a factory that creates the agent model."""
+    """返回用于创建 Agent 模型的工厂函数。"""
 
     return create_chat_model
 
 
 def get_approval_store() -> ApprovalStore:
-    """Return the approval store."""
+    """返回审批存储服务。"""
 
     return approval_store
 
 
 def get_conversation_memory() -> ConversationMemory:
-    """Return the conversation memory service."""
+    """返回会话记忆服务。"""
 
     return conversation_memory
 
@@ -53,7 +59,7 @@ def _build_agent_state(
     request: ChatRequest,
     memory: ConversationMemory,
 ) -> AgentState:
-    """Build agent state from history and the current user message."""
+    """根据历史消息和当前用户消息构建 Agent 状态。"""
 
     state = create_initial_state(
         user_message=request.message,
@@ -81,8 +87,16 @@ def chat(
         ApprovalStore,
         Depends(get_approval_store),
     ],
+    vector_store: Annotated[
+        ProductVectorStore,
+        Depends(get_product_vector_store),
+    ],
+    policy_vector_store: Annotated[
+        PolicyVectorStore,
+        Depends(get_policy_vector_store),
+    ],
 ) -> ChatResponse:
-    """Answer one user message with the commerce agent."""
+    """使用电商 Agent 回答一条用户消息。"""
 
     risk_level, approval_required = assess_risk(request.message)
 
@@ -104,7 +118,11 @@ def chat(
 
     try:
         model = model_factory()
-        tools = create_commerce_tools(session)
+        tools = create_commerce_tools(
+            session,
+            vector_store,
+            policy_vector_store,
+        )
         graph = build_commerce_graph(model, tools)
         result = graph.invoke(
             _build_agent_state(

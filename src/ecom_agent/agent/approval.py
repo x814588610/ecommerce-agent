@@ -1,4 +1,4 @@
-"""Human approval records for high-risk actions."""
+"""高风险操作的人工审批记录。"""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -9,7 +9,7 @@ ApprovalStatus = Literal["pending", "approved", "rejected"]
 
 @dataclass
 class ApprovalRequest:
-    """A human approval request."""
+    """人工审批请求。"""
 
     approval_id: str
     session_id: str
@@ -19,7 +19,7 @@ class ApprovalRequest:
 
 
 class ApprovalStore:
-    """Store approval requests in memory."""
+    """在内存中保存审批请求。"""
 
     def __init__(self) -> None:
         self._requests: dict[str, ApprovalRequest] = {}
@@ -30,7 +30,7 @@ class ApprovalStore:
         user_id: str,
         action: str,
     ) -> ApprovalRequest:
-        """Create a pending approval request."""
+        """创建一个待处理的审批请求。"""
 
         approval = ApprovalRequest(
             approval_id=f"approval-{uuid4().hex}",
@@ -42,7 +42,7 @@ class ApprovalStore:
         return approval
 
     def get(self, approval_id: str) -> ApprovalRequest | None:
-        """Find an approval request by ID."""
+        """根据 ID 查找审批请求。"""
 
         return self._requests.get(approval_id)
 
@@ -51,7 +51,7 @@ class ApprovalStore:
         approval_id: str,
         approved: bool,
     ) -> ApprovalRequest | None:
-        """Approve or reject a pending request."""
+        """批准或拒绝一个待处理的请求。"""
 
         approval = self.get(approval_id)
 
