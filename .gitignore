@@ -11,3 +11,4 @@ logs/
 *.log
 *.egg-info/
 AGENTS.md
+data/qdrant/
