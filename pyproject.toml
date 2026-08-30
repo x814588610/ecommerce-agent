@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ecommerce-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "An e-commerce customer service and product recommendation agent."
 requires-python = ">=3.10"
 dependencies = [
