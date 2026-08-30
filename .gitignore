@@ -12,3 +12,9 @@ logs/
 *.egg-info/
 AGENTS.md
 data/qdrant/
+
+# Local resume, interview, and rendering artifacts
+deepseek_html_*_original_backup_*.html
+*_20??????.txt
+*_20??????.html
+render-profile/
