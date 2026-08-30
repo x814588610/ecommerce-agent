@@ -8,9 +8,10 @@ from sqlmodel import Session
 
 from ecom_agent.api.approvals import router as approvals_router
 from ecom_agent.api.chat import router as chat_router
+from ecom_agent.api.orders import router as orders_router
 from ecom_agent.api.products import router as products_router
 from ecom_agent.commerce.database import create_db_and_tables, engine
-from ecom_agent.commerce.seed import seed_products
+from ecom_agent.commerce.seed import seed_orders, seed_products
 from ecom_agent.logging_config import setup_logging
 from ecom_agent.settings import get_settings
 
@@ -27,6 +28,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     with Session(engine) as session:
         seed_products(session)
+        seed_orders(session)
 
     yield
 
@@ -41,6 +43,7 @@ app = FastAPI(
 app.include_router(products_router)
 app.include_router(chat_router)
 app.include_router(approvals_router)
+app.include_router(orders_router)
 
 @app.get("/health", tags=["system"])
 def health_check() -> dict[str, str]:

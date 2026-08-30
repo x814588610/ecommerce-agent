@@ -9,21 +9,18 @@ from langchain_core.messages import AIMessage
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from ecom_agent.agent.approval import ApprovalStore
 from ecom_agent.agent.memory import ConversationMemory
 from ecom_agent.api.chat import (
     get_agent_model,
-    get_approval_store,
     get_conversation_memory,
+    get_policy_vector_store_factory,
+    get_product_vector_store_factory,
 )
 from ecom_agent.api.main import app
 from ecom_agent.commerce.database import get_session
 from ecom_agent.commerce.models import ProductRecord
 from ecom_agent.commerce.repository import ProductRepository
-from ecom_agent.retrieval.factory import (
-    get_policy_vector_store,
-    get_product_vector_store,
-)
+from ecom_agent.commerce.seed import seed_orders
 from ecom_agent.retrieval.policy_vector_store import PolicySearchResult
 from ecom_agent.retrieval.vector_store import ProductSearchResult
 
@@ -120,13 +117,13 @@ def create_test_client(
     if policy_vector_store is None:
         policy_vector_store = FakePolicyVectorStore()
 
-    test_approval_store = ApprovalStore()
     test_memory = ConversationMemory()
     test_engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
     SQLModel.metadata.create_all(test_engine)
 
     with Session(test_engine) as session:
@@ -141,6 +138,7 @@ def create_test_client(
                 stock=10,
             )
         )
+        seed_orders(session)
 
     def override_get_session() -> Iterator[Session]:
         with Session(test_engine) as session:
@@ -149,24 +147,30 @@ def create_test_client(
     def override_get_agent_model() -> Callable[[], FakeModel]:
         return lambda: model
 
-    def override_get_approval_store() -> ApprovalStore:
-        return test_approval_store
-
     def override_get_conversation_memory() -> ConversationMemory:
         return test_memory
 
-    def override_get_product_vector_store() -> FakeVectorStore:
-        return vector_store
+    def override_get_product_vector_store_factory() -> Callable[
+        [],
+        FakeVectorStore,
+    ]:
+        return lambda: vector_store
 
-    def override_get_policy_vector_store() -> FakePolicyVectorStore:
-        return policy_vector_store
+    def override_get_policy_vector_store_factory() -> Callable[
+        [],
+        FakePolicyVectorStore,
+    ]:
+        return lambda: policy_vector_store
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_agent_model] = override_get_agent_model
     app.dependency_overrides[get_conversation_memory] = override_get_conversation_memory
-    app.dependency_overrides[get_approval_store] = override_get_approval_store
-    app.dependency_overrides[get_product_vector_store] = override_get_product_vector_store
-    app.dependency_overrides[get_policy_vector_store] = override_get_policy_vector_store
+    app.dependency_overrides[get_product_vector_store_factory] = (
+        override_get_product_vector_store_factory
+    )
+    app.dependency_overrides[get_policy_vector_store_factory] = (
+        override_get_policy_vector_store_factory
+    )
     client = TestClient(app)
 
     try:
@@ -426,3 +430,82 @@ def test_chat_executes_policy_tool() -> None:
     assert "退款政策" in model.calls[1][-1].content
     assert "3 到 7 个工作日" in model.calls[1][-1].content
     assert policy_vector_store.calls == [("退款通常多久到账？", 3)]
+
+
+def test_chat_executes_order_tool_for_current_user() -> None:
+    """聊天 Agent 应该能够查询当前用户的订单。"""
+
+    model = FakeModel(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "get_order_status",
+                        "args": {"order_id": "order-001"},
+                        "id": "order-call-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="你的订单已经发货，订单金额为 2298 元。"),
+        ]
+    )
+
+    with create_test_client(model) as client:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "查询订单 order-001 的状态",
+                "session_id": "order-session",
+                "user_id": "user-001",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "你的订单已经发货，订单金额为 2298 元。"
+    assert response.json()["step_count"] == 2
+    assert len(model.calls) == 2
+    assert model.calls[1][-1].type == "tool"
+    assert "order-001" in model.calls[1][-1].content
+    assert "shipped" in model.calls[1][-1].content
+
+
+def test_chat_hides_other_user_order() -> None:
+    """聊天 Agent 不应该返回其他用户的订单信息。"""
+
+    model = FakeModel(
+        [
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "get_order_status",
+                        "args": {"order_id": "order-001"},
+                        "id": "blocked-order-call",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="没有找到属于你的订单。"),
+        ]
+    )
+
+    with create_test_client(model) as client:
+        response = client.post(
+            "/chat",
+            json={
+                "message": "查询订单 order-001 的状态",
+                "session_id": "blocked-order-session",
+                "user_id": "user-002",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "没有找到属于你的订单。"
+    assert response.json()["step_count"] == 2
+    assert len(model.calls) == 2
+
+    tool_content = model.calls[1][-1].content
+    assert '"error": "order_not_found"' in tool_content
+    assert "shipped" not in tool_content

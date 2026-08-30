@@ -3,18 +3,20 @@
 import logging
 from collections.abc import Callable
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from sqlmodel import Session
 
-from ecom_agent.agent.approval import ApprovalStore
 from ecom_agent.agent.graph import build_commerce_graph
 from ecom_agent.agent.memory import ConversationMemory
 from ecom_agent.agent.policies import assess_risk
 from ecom_agent.agent.registry import create_commerce_tools
 from ecom_agent.agent.state import AgentState, create_initial_state
+from ecom_agent.commerce.approval_models import ApprovalRecord
+from ecom_agent.commerce.approval_repository import ApprovalRepository
 from ecom_agent.commerce.database import get_session
 from ecom_agent.llm.factory import create_chat_model
 from ecom_agent.retrieval.factory import (
@@ -26,6 +28,8 @@ from ecom_agent.retrieval.vector_store import ProductVectorStore
 from ecom_agent.schemas.message import ChatRequest, ChatResponse
 
 ModelFactory = Callable[[], BaseChatModel]
+ProductVectorStoreFactory = Callable[[], ProductVectorStore]
+PolicyVectorStoreFactory = Callable[[], PolicyVectorStore]
 logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(
@@ -34,7 +38,6 @@ router = APIRouter(
 )
 
 conversation_memory = ConversationMemory()
-approval_store = ApprovalStore()
 
 
 def get_agent_model() -> ModelFactory:
@@ -43,10 +46,16 @@ def get_agent_model() -> ModelFactory:
     return create_chat_model
 
 
-def get_approval_store() -> ApprovalStore:
-    """返回审批存储服务。"""
+def get_product_vector_store_factory() -> ProductVectorStoreFactory:
+    """返回延迟创建商品向量存储的工厂函数。"""
 
-    return approval_store
+    return get_product_vector_store
+
+
+def get_policy_vector_store_factory() -> PolicyVectorStoreFactory:
+    """返回延迟创建售后政策向量存储的工厂函数。"""
+
+    return get_policy_vector_store
 
 
 def get_conversation_memory() -> ConversationMemory:
@@ -83,17 +92,13 @@ def chat(
         ConversationMemory,
         Depends(get_conversation_memory),
     ],
-    approval_store: Annotated[
-        ApprovalStore,
-        Depends(get_approval_store),
+    product_store_factory: Annotated[
+        ProductVectorStoreFactory,
+        Depends(get_product_vector_store_factory),
     ],
-    vector_store: Annotated[
-        ProductVectorStore,
-        Depends(get_product_vector_store),
-    ],
-    policy_vector_store: Annotated[
-        PolicyVectorStore,
-        Depends(get_policy_vector_store),
+    policy_store_factory: Annotated[
+        PolicyVectorStoreFactory,
+        Depends(get_policy_vector_store_factory),
     ],
 ) -> ChatResponse:
     """使用电商 Agent 回答一条用户消息。"""
@@ -101,10 +106,15 @@ def chat(
     risk_level, approval_required = assess_risk(request.message)
 
     if approval_required:
-        approval = approval_store.create(
-            session_id=request.session_id,
-            user_id=request.user_id,
-            action=request.message,
+        approval_repository = ApprovalRepository(session)
+
+        approval = approval_repository.add(
+            ApprovalRecord(
+                approval_id=f"approval-{uuid4().hex}",
+                session_id=request.session_id,
+                user_id=request.user_id,
+                action=request.message,
+            )
         )
 
         return ChatResponse(
@@ -118,10 +128,13 @@ def chat(
 
     try:
         model = model_factory()
+        vector_store = product_store_factory()
+        policy_vector_store = policy_store_factory()
         tools = create_commerce_tools(
             session,
             vector_store,
             policy_vector_store,
+            user_id=request.user_id,
         )
         graph = build_commerce_graph(model, tools)
         result = graph.invoke(

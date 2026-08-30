@@ -29,6 +29,7 @@ def test_create_commerce_tools_returns_all_tools() -> None:
             session,
             fake_vector_store,
             fake_policy_vector_store,
+            user_id="user-001",
         )
 
     assert [tool.name for tool in tools] == [
@@ -37,4 +38,5 @@ def test_create_commerce_tools_returns_all_tools() -> None:
         "get_product_detail",
         "check_inventory",
         "search_policy",
+        "get_order_status",
     ]

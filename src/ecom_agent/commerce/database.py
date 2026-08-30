@@ -3,9 +3,11 @@
 from collections.abc import Generator
 from pathlib import Path
 
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
 
-from ecom_agent.commerce.models import ProductRecord
+from ecom_agent.commerce import approval_models as _approval_models  # noqa: F401
+from ecom_agent.commerce import models as _product_models  # noqa: F401
+from ecom_agent.commerce import order_models as _order_models  # noqa: F401
 from ecom_agent.settings import get_settings
 
 settings = get_settings()
@@ -33,7 +35,7 @@ engine = create_engine(
 def create_db_and_tables() -> None:
     """如果数据库表不存在则创建全部表。"""
 
-    ProductRecord.metadata.create_all(engine)
+    SQLModel.metadata.create_all(engine)
 
 
 def get_session() -> Generator[Session, None, None]:

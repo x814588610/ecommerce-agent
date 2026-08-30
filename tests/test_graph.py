@@ -1,4 +1,5 @@
 """Tests for the commerce agent graph."""
+
 import logging
 
 from langchain_core.messages import AIMessage
@@ -16,10 +17,18 @@ def lookup_product(product_id: str) -> str:
 
 
 @tool
+def get_order_status(order_id: str) -> str:
+    """模拟订单状态查询。"""
+
+    return f'{{"order_id": "{order_id}", "status": "shipped"}}'
+
+
+@tool
 def failing_product_lookup(product_id: str) -> str:
     """模拟商品工具异常。"""
 
     raise RuntimeError("测试工具异常")
+
 
 @tool
 def search_products(query: str) -> str:
@@ -47,6 +56,7 @@ def search_policy(query: str) -> str:
         '"source": "本地售后政策"}], "total": 1}'
     )
 
+
 class FakeModel:
     """A fake model that returns predefined responses."""
 
@@ -66,6 +76,22 @@ class FakeModel:
 
         self.calls.append(messages)
         return self.responses.pop(0)
+
+
+def create_order_tool_call(call_id: str) -> AIMessage:
+    """创建一个模拟订单工具调用。"""
+
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "get_order_status",
+                "args": {"order_id": "order-001"},
+                "id": call_id,
+                "type": "tool_call",
+            }
+        ],
+    )
 
 
 def create_tool_call(call_id: str) -> AIMessage:
@@ -101,6 +127,45 @@ def test_graph_returns_direct_model_answer() -> None:
     assert len(model.calls) == 1
 
 
+def test_graph_allows_order_tool_for_order_intent() -> None:
+    """订单意图应该允许调用订单查询工具。"""
+
+    model = FakeModel(
+        [
+            create_order_tool_call("order-call"),
+            AIMessage(content="订单已经发货。"),
+        ]
+    )
+    graph = build_commerce_graph(model, [get_order_status])
+
+    result = graph.invoke(create_initial_state("查询订单 order-001 的状态"))
+
+    assert result["intent"] == "order_query"
+    assert result["answer"] == "订单已经发货。"
+    assert result["step_count"] == 2
+    assert len(model.calls) == 2
+    assert result["messages"][-2].type == "tool"
+    assert "shipped" in result["messages"][-2].content
+
+
+def test_graph_blocks_product_tool_for_order_intent() -> None:
+    """订单意图不应该调用商品查询工具。"""
+
+    model = FakeModel(
+        [
+            create_tool_call("blocked-order-call"),
+        ]
+    )
+    graph = build_commerce_graph(model, [lookup_product])
+
+    result = graph.invoke(create_initial_state("查询订单 order-001 的状态"))
+
+    assert result["intent"] == "order_query"
+    assert result["answer"] == ("当前请求与工具不匹配，我暂时无法执行该操作。")
+    assert result["step_count"] == 1
+    assert len(model.calls) == 1
+
+
 def test_graph_calls_tool_then_returns_final_answer() -> None:
     """The graph should execute a tool and then ask the model again."""
 
@@ -123,12 +188,7 @@ def test_graph_calls_tool_then_returns_final_answer() -> None:
 def test_graph_stops_after_maximum_steps() -> None:
     """The graph should stop safely instead of looping forever."""
 
-    model = FakeModel(
-        [
-            create_tool_call(f"call-{index}")
-            for index in range(6)
-        ]
-    )
+    model = FakeModel([create_tool_call(f"call-{index}") for index in range(6)])
     graph = build_commerce_graph(model, [lookup_product])
 
     result = graph.invoke(create_initial_state("不断查询商品"))
@@ -148,13 +208,12 @@ def test_graph_classifies_intent_before_model() -> None:
     )
     graph = build_commerce_graph(model, [lookup_product])
 
-    result = graph.invoke(
-        create_initial_state("推荐适合学生学习的手机")
-    )
+    result = graph.invoke(create_initial_state("推荐适合学生学习的手机"))
 
     assert result["intent"] == "semantic_search"
     assert result["answer"] == "推荐结果已经找到。"
     assert "当前请求意图：semantic_search" in model.calls[0][0].content
+
 
 def test_graph_blocks_tool_not_allowed_by_intent() -> None:
     """库存意图不应该调用商品查询工具。"""
@@ -166,14 +225,10 @@ def test_graph_blocks_tool_not_allowed_by_intent() -> None:
     )
     graph = build_commerce_graph(model, [lookup_product])
 
-    result = graph.invoke(
-        create_initial_state("这个手机还有库存吗")
-    )
+    result = graph.invoke(create_initial_state("这个手机还有库存吗"))
 
     assert result["intent"] == "inventory"
-    assert result["answer"] == (
-        "当前请求与工具不匹配，我暂时无法执行该操作。"
-    )
+    assert result["answer"] == ("当前请求与工具不匹配，我暂时无法执行该操作。")
     assert len(model.calls) == 1
 
 
@@ -205,7 +260,6 @@ def test_graph_returns_friendly_answer_when_tool_fails() -> None:
     assert len(model.calls) == 1
 
 
-
 def test_graph_handles_empty_keyword_search_result() -> None:
     """关键词搜索无结果时，图应该返回固定提示。"""
 
@@ -226,13 +280,9 @@ def test_graph_handles_empty_keyword_search_result() -> None:
     )
     graph = build_commerce_graph(model, [search_products])
 
-    result = graph.invoke(
-        create_initial_state("帮我找一款不存在的手机")
-    )
+    result = graph.invoke(create_initial_state("帮我找一款不存在的手机"))
 
-    assert result["answer"] == (
-        "没有找到符合条件的商品，你可以调整关键词、品牌或价格范围后重试。"
-    )
+    assert result["answer"] == ("没有找到符合条件的商品，你可以调整关键词、品牌或价格范围后重试。")
     assert result["error"] is None
     assert result["step_count"] == 1
     assert len(model.calls) == 1
@@ -262,13 +312,9 @@ def test_graph_handles_empty_semantic_search_result() -> None:
         [semantic_search_products],
     )
 
-    result = graph.invoke(
-        create_initial_state("推荐适合在月球使用的手机")
-    )
+    result = graph.invoke(create_initial_state("推荐适合在月球使用的手机"))
 
-    assert result["answer"] == (
-        "没有找到符合条件的商品，你可以调整关键词、品牌或价格范围后重试。"
-    )
+    assert result["answer"] == ("没有找到符合条件的商品，你可以调整关键词、品牌或价格范围后重试。")
     assert result["error"] is None
     assert result["step_count"] == 1
     assert len(model.calls) == 1
@@ -291,26 +337,19 @@ def test_graph_allows_policy_tool_for_policy_intent() -> None:
                     }
                 ],
             ),
-            AIMessage(
-                content="退款审核通过后，通常需要 3 到 7 个工作日到账。"
-            ),
+            AIMessage(content="退款审核通过后，通常需要 3 到 7 个工作日到账。"),
         ]
     )
     graph = build_commerce_graph(model, [search_policy])
 
-    result = graph.invoke(
-        create_initial_state("退款政策通常多久到账？")
-    )
+    result = graph.invoke(create_initial_state("退款政策通常多久到账？"))
 
     assert result["intent"] == "policy"
-    assert result["answer"] == (
-        "退款审核通过后，通常需要 3 到 7 个工作日到账。"
-    )
+    assert result["answer"] == ("退款审核通过后，通常需要 3 到 7 个工作日到账。")
     assert result["step_count"] == 2
     assert len(model.calls) == 2
     assert result["messages"][-2].type == "tool"
     assert "退款政策" in result["messages"][-2].content
-
 
 
 def test_graph_blocks_product_tool_for_policy_intent() -> None:
@@ -323,17 +362,12 @@ def test_graph_blocks_product_tool_for_policy_intent() -> None:
     )
     graph = build_commerce_graph(model, [lookup_product])
 
-    result = graph.invoke(
-        create_initial_state("退款政策是什么？")
-    )
+    result = graph.invoke(create_initial_state("退款政策是什么？"))
 
     assert result["intent"] == "policy"
-    assert result["answer"] == (
-        "当前请求与工具不匹配，我暂时无法执行该操作。"
-    )
+    assert result["answer"] == ("当前请求与工具不匹配，我暂时无法执行该操作。")
     assert result["step_count"] == 1
     assert len(model.calls) == 1
-
 
 
 def test_graph_logs_model_and_tool_calls(caplog) -> None:
@@ -351,9 +385,7 @@ def test_graph_logs_model_and_tool_calls(caplog) -> None:
         logging.INFO,
         logger="ecom_agent.agent",
     ):
-        result = graph.invoke(
-            create_initial_state("查询 phone-001")
-        )
+        result = graph.invoke(create_initial_state("查询 phone-001"))
 
     assert result["answer"] == "商品查询完成。"
     assert "model_call" in caplog.text

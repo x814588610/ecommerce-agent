@@ -17,15 +17,14 @@ AVAILABLE_TOOL_NAMES = (
     "get_product_detail",
     "check_inventory",
     "search_policy",
+    "get_order_status",
 )
 
 
 def load_cases() -> list[dict[str, object]]:
     """读取固定评估案例。"""
 
-    data = json.loads(
-        CASE_FILE.read_text(encoding="utf-8")
-    )
+    data = json.loads(CASE_FILE.read_text(encoding="utf-8"))
     cases = data.get("cases")
 
     if not isinstance(cases, list):
@@ -53,22 +52,13 @@ def evaluate_case(case: dict[str, object]) -> list[str]:
     failures: list[str] = []
 
     if actual_intent != expected_intent:
-        failures.append(
-            f"意图错误，实际为 {actual_intent}，"
-            f"预期为 {expected_intent}"
-        )
+        failures.append(f"意图错误，实际为 {actual_intent}，预期为 {expected_intent}")
 
     if actual_risk != expected_risk:
-        failures.append(
-            f"风险等级错误，实际为 {actual_risk}，"
-            f"预期为 {expected_risk}"
-        )
+        failures.append(f"风险等级错误，实际为 {actual_risk}，预期为 {expected_risk}")
 
     if actual_approval != expected_approval:
-        failures.append(
-            f"审批判断错误，实际为 {actual_approval}，"
-            f"预期为 {expected_approval}"
-        )
+        failures.append(f"审批判断错误，实际为 {actual_approval}，预期为 {expected_approval}")
 
     if isinstance(expected_tool, str):
         tool_allowed = is_tool_allowed(
@@ -78,9 +68,7 @@ def evaluate_case(case: dict[str, object]) -> list[str]:
         )
 
         if not tool_allowed:
-            failures.append(
-                f"工具 {expected_tool} 不被意图 {actual_intent} 允许"
-            )
+            failures.append(f"工具 {expected_tool} 不被意图 {actual_intent} 允许")
 
     return failures
 
@@ -105,10 +93,7 @@ def main() -> None:
             print(f"PASS: {case_id}")
 
     passed_count = len(cases) - failed_count
-    print(
-        f"RESULT: {passed_count} passed, "
-        f"{failed_count} failed"
-    )
+    print(f"RESULT: {passed_count} passed, {failed_count} failed")
 
     if failed_count:
         raise SystemExit(1)

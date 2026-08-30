@@ -3,12 +3,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session
 
-from ecom_agent.agent.approval import (
-    ApprovalRequest,
-    ApprovalStore,
-)
-from ecom_agent.api.chat import get_approval_store
+from ecom_agent.commerce.approval_models import ApprovalRecord
+from ecom_agent.commerce.approval_repository import ApprovalRepository
+from ecom_agent.commerce.database import get_session
 from ecom_agent.schemas.approval import (
     ApprovalDecisionRequest,
     ApprovalResponse,
@@ -20,7 +19,7 @@ router = APIRouter(
 )
 
 
-def _to_response(approval: ApprovalRequest) -> ApprovalResponse:
+def _to_response(approval: ApprovalRecord) -> ApprovalResponse:
     """将审批记录转换为 API 响应。"""
 
     return ApprovalResponse(
@@ -35,11 +34,12 @@ def _to_response(approval: ApprovalRequest) -> ApprovalResponse:
 @router.get("/{approval_id}", response_model=ApprovalResponse)
 def get_approval(
     approval_id: str,
-    store: Annotated[ApprovalStore, Depends(get_approval_store)],
+    session: Annotated[Session, Depends(get_session)],
 ) -> ApprovalResponse:
     """返回一个审批请求。"""
 
-    approval = store.get(approval_id)
+    repository = ApprovalRepository(session)
+    approval = repository.get(approval_id)
 
     if approval is None:
         raise HTTPException(
@@ -57,11 +57,12 @@ def get_approval(
 def decide_approval(
     approval_id: str,
     request: ApprovalDecisionRequest,
-    store: Annotated[ApprovalStore, Depends(get_approval_store)],
+    session: Annotated[Session, Depends(get_session)],
 ) -> ApprovalResponse:
     """批准或拒绝一个待处理请求。"""
 
-    approval = store.decide(
+    repository = ApprovalRepository(session)
+    approval = repository.decide(
         approval_id=approval_id,
         approved=request.approved,
     )

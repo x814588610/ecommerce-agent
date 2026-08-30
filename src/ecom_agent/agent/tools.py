@@ -8,6 +8,11 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from ecom_agent.commerce.models import ProductRecord
+from ecom_agent.commerce.order_models import (
+    OrderItemRecord,
+    OrderRecord,
+)
+from ecom_agent.commerce.order_repository import OrderRepository
 from ecom_agent.commerce.repository import ProductRepository
 from ecom_agent.retrieval.policy_vector_store import (
     PolicySearchResult,
@@ -54,6 +59,16 @@ class ProductIdToolInput(BaseModel):
         description="The unique product ID.",
     )
 
+
+class OrderIdToolInput(BaseModel):
+    """订单查询工具接受的输入参数。"""
+
+    order_id: str = Field(
+        min_length=1,
+        description="The unique order ID.",
+    )
+
+
 class PolicySearchToolInput(BaseModel):
     """售后政策搜索工具接受的输入参数。"""
 
@@ -67,6 +82,7 @@ class PolicySearchToolInput(BaseModel):
         le=10,
         description="最多返回的政策数量。",
     )
+
 
 def _serialize_product(record: ProductRecord) -> dict[str, object]:
     """将数据库记录转换为 JSON 兼容的数据。"""
@@ -82,6 +98,43 @@ def _serialize_product(record: ProductRecord) -> dict[str, object]:
         "tags": json.loads(record.tags_json),
     }
 
+
+def _serialize_order(
+    order: OrderRecord,
+    items: list[OrderItemRecord],
+) -> dict[str, object]:
+    """将订单记录转换为 JSON 兼容的数据。"""
+
+    return {
+        "order_id": order.order_id,
+        "status": order.status,
+        "total_amount": str(order.total_amount),
+        "created_at": order.created_at.isoformat(),
+        "items": [
+            {
+                "order_item_id": item.order_item_id,
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "quantity": item.quantity,
+                "unit_price": str(item.unit_price),
+            }
+            for item in items
+        ],
+    }
+
+
+def _order_not_found(order_id: str) -> str:
+    """返回机器可读的订单不存在结果。"""
+
+    return json.dumps(
+        {
+            "error": "order_not_found",
+            "order_id": order_id,
+        },
+        ensure_ascii=False,
+    )
+
+
 def _serialize_policy_result(
     result: PolicySearchResult,
 ) -> dict[str, object]:
@@ -94,6 +147,7 @@ def _serialize_policy_result(
         "score": result.score,
         "source": result.payload.get("source", ""),
     }
+
 
 def _product_not_found(product_id: str) -> str:
     """返回机器可读的商品不存在结果。"""
@@ -182,6 +236,7 @@ def create_inventory_tool(session: Session) -> StructuredTool:
 
     return check_inventory
 
+
 def create_policy_search_tool(
     vector_store: PolicyVectorStore,
 ) -> StructuredTool:
@@ -198,10 +253,7 @@ def create_policy_search_tool(
             query=query,
             limit=limit,
         )
-        items = [
-            _serialize_policy_result(result)
-            for result in results
-        ]
+        items = [_serialize_policy_result(result) for result in results]
 
         return json.dumps(
             {
@@ -212,6 +264,7 @@ def create_policy_search_tool(
         )
 
     return search_policy
+
 
 class SemanticProductSearchToolInput(BaseModel):
     """商品语义搜索工具接受的输入参数。"""
@@ -295,3 +348,33 @@ def create_semantic_product_search_tool(
         )
 
     return semantic_search_products
+
+
+def create_order_query_tool(
+    session: Session,
+    user_id: str,
+) -> StructuredTool:
+    """创建一个只查询当前用户订单的 LangChain 工具。"""
+
+    repository = OrderRepository(session)
+
+    @tool(args_schema=OrderIdToolInput)
+    def get_order_status(order_id: str) -> str:
+        """查询当前用户订单的状态和商品明细。"""
+
+        order = repository.get_by_id_for_user(
+            order_id=order_id,
+            user_id=user_id,
+        )
+
+        if order is None:
+            return _order_not_found(order_id)
+
+        items = repository.list_items(order.order_id)
+
+        return json.dumps(
+            _serialize_order(order, items),
+            ensure_ascii=False,
+        )
+
+    return get_order_status

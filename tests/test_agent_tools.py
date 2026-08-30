@@ -10,13 +10,16 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from ecom_agent.agent.tools import (
+    OrderIdToolInput,
     ProductSearchToolInput,
     create_inventory_tool,
+    create_order_query_tool,
     create_product_detail_tool,
     create_product_search_tool,
 )
 from ecom_agent.commerce.models import ProductRecord
 from ecom_agent.commerce.repository import ProductRepository
+from ecom_agent.commerce.seed import seed_orders
 
 
 def create_test_session() -> Session:
@@ -173,3 +176,53 @@ def test_inventory_tool_reports_out_of_stock_product() -> None:
     assert inventory["product_id"] == "phone-002"
     assert inventory["stock"] == 0
     assert inventory["in_stock"] is False
+
+
+def test_order_query_tool_returns_owner_order() -> None:
+    """用户应该能够通过工具查询自己的订单。"""
+
+    with create_test_session() as session:
+        seed_orders(session)
+        order_tool = create_order_query_tool(
+            session,
+            user_id="user-001",
+        )
+        raw_result = order_tool.invoke({"order_id": "order-001"})
+
+    result = json.loads(raw_result)
+
+    assert result["order_id"] == "order-001"
+    assert result["status"] == "shipped"
+    assert result["total_amount"] == "2298.00"
+    assert len(result["items"]) == 2
+    assert "user_id" not in result
+
+
+def test_order_query_tool_hides_other_user_order() -> None:
+    """用户不应该通过工具查询其他用户的订单。"""
+
+    with create_test_session() as session:
+        seed_orders(session)
+        order_tool = create_order_query_tool(
+            session,
+            user_id="user-002",
+        )
+        raw_result = order_tool.invoke({"order_id": "order-001"})
+
+    assert json.loads(raw_result) == {
+        "error": "order_not_found",
+        "order_id": "order-001",
+    }
+
+
+def test_order_query_tool_accepts_only_order_id() -> None:
+    """订单工具的模型参数只能包含订单 ID。"""
+
+    with create_test_session() as session:
+        order_tool = create_order_query_tool(
+            session,
+            user_id="user-001",
+        )
+
+    assert set(order_tool.args) == {"order_id"}
+    assert set(OrderIdToolInput.model_fields) == {"order_id"}

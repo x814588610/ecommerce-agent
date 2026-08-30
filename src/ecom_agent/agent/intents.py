@@ -3,12 +3,15 @@
 from collections.abc import Sequence
 from typing import Literal
 
+from ecom_agent.agent.policies import HIGH_RISK_ACTIONS
+
 Intent = Literal[
     "semantic_search",
     "product_detail",
     "inventory",
     "policy",
     "general",
+    "order_query",
 ]
 
 
@@ -18,6 +21,9 @@ def classify_intent(user_message: str) -> Intent:
     normalized_message = " ".join(user_message.strip().split())
 
     if not normalized_message:
+        return "general"
+
+    if any(action in normalized_message for action in HIGH_RISK_ACTIONS):
         return "general"
 
     policy_query_keywords = (
@@ -37,6 +43,23 @@ def classify_intent(user_message: str) -> Intent:
 
     if any(keyword in normalized_message for keyword in policy_query_keywords):
         return "policy"
+
+    order_query_keywords = (
+        "订单",
+        "订单号",
+        "订单状态",
+        "我的订单",
+        "查订单",
+        "查询订单",
+        "物流",
+        "物流进度",
+        "配送进度",
+        "发货了吗",
+        "什么时候发货",
+    )
+
+    if any(keyword in normalized_message for keyword in order_query_keywords):
+        return "order_query"
 
     inventory_query_keywords = (
         "库存吗",
@@ -90,6 +113,11 @@ TOOL_NAMES_BY_INTENT: dict[Intent, frozenset[str]] = {
     "policy": frozenset(
         {
             "search_policy",
+        }
+    ),
+    "order_query": frozenset(
+        {
+            "get_order_status",
         }
     ),
     "general": frozenset(),

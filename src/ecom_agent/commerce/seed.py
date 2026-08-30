@@ -5,6 +5,11 @@ from decimal import Decimal
 from sqlmodel import Session
 
 from ecom_agent.commerce.models import ProductRecord
+from ecom_agent.commerce.order_models import (
+    OrderItemRecord,
+    OrderRecord,
+)
+from ecom_agent.commerce.order_repository import OrderRepository
 from ecom_agent.commerce.repository import ProductRepository
 
 
@@ -73,3 +78,61 @@ def seed_products(session: Session) -> int:
         repository.add(product)
 
     return len(products)
+
+
+def seed_orders(session: Session) -> int:
+    """数据库为空时插入演示订单。"""
+
+    repository = OrderRepository(session)
+
+    if repository.list_all():
+        return 0
+
+    orders = [
+        (
+            OrderRecord(
+                order_id="order-001",
+                user_id="user-001",
+                status="shipped",
+                total_amount=Decimal("2298.00"),
+            ),
+            [
+                OrderItemRecord(
+                    order_id="order-001",
+                    product_id="phone-001",
+                    product_name="学习手机",
+                    quantity=1,
+                    unit_price=Decimal("1999.00"),
+                ),
+                OrderItemRecord(
+                    order_id="order-001",
+                    product_id="keyboard-001",
+                    product_name="机械键盘",
+                    quantity=1,
+                    unit_price=Decimal("299.00"),
+                ),
+            ],
+        ),
+        (
+            OrderRecord(
+                order_id="order-002",
+                user_id="user-002",
+                status="paid",
+                total_amount=Decimal("4299.00"),
+            ),
+            [
+                OrderItemRecord(
+                    order_id="order-002",
+                    product_id="laptop-001",
+                    product_name="轻薄办公本",
+                    quantity=1,
+                    unit_price=Decimal("4299.00"),
+                ),
+            ],
+        ),
+    ]
+
+    for order, items in orders:
+        repository.add(order, items)
+
+    return len(orders)

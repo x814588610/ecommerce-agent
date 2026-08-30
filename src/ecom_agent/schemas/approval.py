@@ -1,10 +1,9 @@
 """审批请求和响应模型。"""
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ecom_agent.agent.approval import ApprovalStatus
-
-
+ApprovalStatus = Literal["pending", "approved", "rejected"]
 class ApprovalDecisionRequest(BaseModel):
     """人工审核者提交的决定。"""
 

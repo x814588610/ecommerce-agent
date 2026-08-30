@@ -6,24 +6,25 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
 
-from ecom_agent.agent.approval import ApprovalStore
-from ecom_agent.api.chat import get_agent_model, get_approval_store
+from ecom_agent.api.chat import get_agent_model
 from ecom_agent.api.main import app
+from ecom_agent.commerce.approval_models import ApprovalRecord
+from ecom_agent.commerce.approval_repository import ApprovalRepository
 from ecom_agent.commerce.database import get_session
 
 
 @contextmanager
-def create_test_client() -> Iterator[tuple[TestClient, ApprovalStore]]:
-    """Create an API client with an isolated approval store."""
+def create_test_client() -> Iterator[tuple[TestClient, Session]]:
+    """Create an API client with an isolated approval database."""
 
-    test_store = ApprovalStore()
     test_engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    SQLModel.metadata.create_all(test_engine)
 
     def override_get_session() -> Iterator[Session]:
         with Session(test_engine) as session:
@@ -32,21 +33,17 @@ def create_test_client() -> Iterator[tuple[TestClient, ApprovalStore]]:
     def override_get_agent_model() -> Callable[[], object]:
         return object
 
-    def override_get_approval_store() -> ApprovalStore:
-        return test_store
-
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_agent_model] = override_get_agent_model
-    app.dependency_overrides[get_approval_store] = (
-        override_get_approval_store
-    )
 
     client = TestClient(app)
+    test_session = Session(test_engine)
 
     try:
-        yield client, test_store
+        yield client, test_session
     finally:
         client.close()
+        test_session.close()
         app.dependency_overrides.clear()
 
 
@@ -63,9 +60,7 @@ def test_high_risk_chat_creates_queryable_approval() -> None:
             },
         )
         approval_id = chat_response.json()["approval_id"]
-        approval_response = client.get(
-            f"/approvals/{approval_id}"
-        )
+        approval_response = client.get(f"/approvals/{approval_id}")
 
     assert chat_response.status_code == 200
     assert approval_response.status_code == 200
@@ -91,11 +86,15 @@ def test_decide_approval(
 ) -> None:
     """A reviewer should be able to approve or reject a request."""
 
-    with create_test_client() as (client, store):
-        approval = store.create(
-            session_id="session-001",
-            user_id="user-001",
-            action="取消订单",
+    with create_test_client() as (client, session):
+        repository = ApprovalRepository(session)
+        approval = repository.add(
+            ApprovalRecord(
+                approval_id="approval-test-001",
+                session_id="session-001",
+                user_id="user-001",
+                action="取消订单",
+            )
         )
 
         response = client.post(
@@ -110,30 +109,30 @@ def test_decide_approval(
 def test_missing_approval_returns_404() -> None:
     """Unknown approval IDs should return HTTP 404."""
 
-    with create_test_client() as (client, _store):
-        get_response = client.get(
-            "/approvals/approval-not-found"
-        )
+    with create_test_client() as (client, _session):
+        get_response = client.get("/approvals/approval-not-found")
         decision_response = client.post(
             "/approvals/approval-not-found/decision",
             json={"approved": True},
         )
 
     assert get_response.status_code == 404
-    assert get_response.json() == {
-        "detail": "Approval request not found."
-    }
+    assert get_response.json() == {"detail": "Approval request not found."}
     assert decision_response.status_code == 404
 
 
 def test_decision_requires_approved_field() -> None:
     """A decision without an approved value should be rejected."""
 
-    with create_test_client() as (client, store):
-        approval = store.create(
-            session_id="session-001",
-            user_id="user-001",
-            action="修改收货地址",
+    with create_test_client() as (client, session):
+        repository = ApprovalRepository(session)
+        approval = repository.add(
+            ApprovalRecord(
+                approval_id="approval-test-002",
+                session_id="session-001",
+                user_id="user-001",
+                action="修改收货地址",
+            )
         )
 
         response = client.post(

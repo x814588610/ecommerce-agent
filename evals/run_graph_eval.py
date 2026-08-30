@@ -27,6 +27,13 @@ def semantic_search_products(query: str) -> str:
 
 
 @tool
+def get_order_status(order_id: str) -> str:
+    """模拟订单状态查询。"""
+
+    return f"订单状态：{order_id}"
+
+
+@tool
 def get_product_detail(product_id: str) -> str:
     """模拟商品详情查询。"""
 
@@ -53,6 +60,7 @@ AVAILABLE_TOOLS: list[BaseTool] = [
     get_product_detail,
     check_inventory,
     search_policy,
+    get_order_status,
 ]
 
 
@@ -109,15 +117,16 @@ class FakeModel:
         }:
             return {"query": "评估问题"}
 
+        if self.tool_name == "get_order_status":
+            return {"order_id": "order-001"}
+
         return {"product_id": "phone-001"}
 
 
 def load_cases() -> list[dict[str, object]]:
     """读取固定评估案例。"""
 
-    data = json.loads(
-        CASE_FILE.read_text(encoding="utf-8")
-    )
+    data = json.loads(CASE_FILE.read_text(encoding="utf-8"))
     cases = data.get("cases")
 
     if not isinstance(cases, list):
@@ -145,34 +154,21 @@ def evaluate_case(case: dict[str, object]) -> list[str]:
         model,
         AVAILABLE_TOOLS,
     )
-    result = graph.invoke(
-        create_initial_state(message)
-    )
+    result = graph.invoke(create_initial_state(message))
 
     failures: list[str] = []
 
     if result.get("intent") != expected_intent:
-        failures.append(
-            f"意图错误，实际为 {result.get('intent')}，"
-            f"预期为 {expected_intent}"
-        )
+        failures.append(f"意图错误，实际为 {result.get('intent')}，预期为 {expected_intent}")
 
     if result.get("answer") != "评估用最终回答。":
-        failures.append(
-            f"没有得到预期最终回答：{result.get('answer')}"
-        )
+        failures.append(f"没有得到预期最终回答：{result.get('answer')}")
 
     if result.get("step_count") != 2:
-        failures.append(
-            f"执行步数错误，实际为 {result.get('step_count')}，"
-            "预期为 2"
-        )
+        failures.append(f"执行步数错误，实际为 {result.get('step_count')}，预期为 2")
 
     if len(model.calls) != 2:
-        failures.append(
-            f"模型调用次数错误，实际为 {len(model.calls)}，"
-            "预期为 2"
-        )
+        failures.append(f"模型调用次数错误，实际为 {len(model.calls)}，预期为 2")
 
     messages = result.get("messages", [])
 
@@ -211,11 +207,7 @@ def main() -> None:
             passed_count += 1
             print(f"PASS: {case_id}")
 
-    print(
-        f"RESULT: {passed_count} passed, "
-        f"{skipped_count} skipped, "
-        f"{failed_count} failed"
-    )
+    print(f"RESULT: {passed_count} passed, {skipped_count} skipped, {failed_count} failed")
 
     if failed_count:
         raise SystemExit(1)

@@ -22,6 +22,11 @@ from ecom_agent.agent.intents import (
         ("退款政策是什么", "policy"),
         ("这个商品支持退货吗", "policy"),
         ("售后保修多久", "policy"),
+        ("查询订单 order-001 的状态", "order_query"),
+        ("我的订单物流到哪里了", "order_query"),
+        ("订单什么时候发货", "order_query"),
+        ("我要申请退款", "general"),
+        ("帮我取消订单", "general"),
         ("", "general"),
     ],
 )
@@ -38,6 +43,7 @@ def test_stock_filter_does_not_override_search_intent() -> None:
     """搜索请求中的库存条件不应该改变商品搜索意图。"""
 
     assert classify_intent("推荐一部现在有库存的手机") == "semantic_search"
+
 
 @pytest.mark.parametrize(
     ("intent", "tool_name", "available_tool_names", "expected"),
@@ -59,7 +65,6 @@ def test_policy_tool_permissions(
 ) -> None:
     """售后意图应该只允许调用售后政策工具。"""
 
-
     assert (
         is_tool_allowed(
             intent,
@@ -67,4 +72,20 @@ def test_policy_tool_permissions(
             available_tool_names,
         )
         is expected
+    )
+
+
+def test_order_tool_permissions() -> None:
+    """订单意图只能调用订单查询工具。"""
+
+    assert is_tool_allowed(
+        "order_query",
+        "get_order_status",
+        ["get_order_status"],
+    )
+
+    assert not is_tool_allowed(
+        "order_query",
+        "search_products",
+        ["get_order_status", "search_products"],
     )

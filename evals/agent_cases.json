@@ -63,6 +63,14 @@
       "expected_risk": "low",
       "expected_approval": false,
       "expected_tool": null
+    },
+    {
+      "case_id": "order_query",
+      "message": "查询订单 order-001 的状态",
+      "expected_intent": "order_query",
+      "expected_risk": "low",
+      "expected_approval": false,
+      "expected_tool": "get_order_status"
     }
   ]
 }
