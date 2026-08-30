@@ -14,6 +14,11 @@ from ecom_agent.commerce.approval_models import ApprovalRecord
 from ecom_agent.commerce.approval_repository import ApprovalRepository
 from ecom_agent.commerce.database import get_session
 
+REVIEWER_HEADERS = {
+    "X-Reviewer-ID": "admin-001",
+    "X-Reviewer-Role": "admin",
+}
+
 
 @contextmanager
 def create_test_client() -> Iterator[tuple[TestClient, Session]]:
@@ -58,6 +63,7 @@ def test_high_risk_chat_creates_queryable_approval() -> None:
                 "session_id": "session-001",
                 "user_id": "user-001",
             },
+            headers=REVIEWER_HEADERS,
         )
         approval_id = chat_response.json()["approval_id"]
         approval_response = client.get(f"/approvals/{approval_id}")
@@ -100,6 +106,7 @@ def test_decide_approval(
         response = client.post(
             f"/approvals/{approval.approval_id}/decision",
             json={"approved": approved},
+            headers=REVIEWER_HEADERS,
         )
 
     assert response.status_code == 200
@@ -114,6 +121,7 @@ def test_missing_approval_returns_404() -> None:
         decision_response = client.post(
             "/approvals/approval-not-found/decision",
             json={"approved": True},
+            headers=REVIEWER_HEADERS,
         )
 
     assert get_response.status_code == 404
@@ -138,7 +146,35 @@ def test_decision_requires_approved_field() -> None:
         response = client.post(
             f"/approvals/{approval.approval_id}/decision",
             json={},
+            headers=REVIEWER_HEADERS,
         )
 
     assert response.status_code == 422
+    assert approval.status == "pending"
+
+
+def test_decision_rejects_unknown_reviewer() -> None:
+    """未知审核者不能处理审批。"""
+
+    with create_test_client() as (client, session):
+        repository = ApprovalRepository(session)
+        approval = repository.add(
+            ApprovalRecord(
+                approval_id="approval-unauthorized-001",
+                session_id="session-001",
+                user_id="user-001",
+                action="申请退款",
+            )
+        )
+
+        response = client.post(
+            f"/approvals/{approval.approval_id}/decision",
+            json={"approved": True},
+            headers={
+                "X-Reviewer-ID": "unknown-user",
+                "X-Reviewer-Role": "admin",
+            },
+        )
+
+    assert response.status_code == 403
     assert approval.status == "pending"

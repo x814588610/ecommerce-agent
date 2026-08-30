@@ -26,6 +26,7 @@ def request_json(
     method: str,
     url: str,
     json_data: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """Send an API request and return a JSON object."""
 
@@ -35,6 +36,7 @@ def request_json(
             url=url,
             json=json_data,
             timeout=REQUEST_TIMEOUT,
+            headers=headers,
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
@@ -43,13 +45,9 @@ def request_json(
         except ValueError:
             detail = exc.response.text
 
-        raise RuntimeError(
-            f"API 返回 {exc.response.status_code}：{detail}"
-        ) from exc
+        raise RuntimeError(f"API 返回 {exc.response.status_code}：{detail}") from exc
     except httpx.RequestError as exc:
-        raise RuntimeError(
-            "无法连接 FastAPI 服务，请确认服务已经启动。"
-        ) from exc
+        raise RuntimeError("无法连接 FastAPI 服务，请确认服务已经启动。") from exc
 
     data = response.json()
 
@@ -81,6 +79,8 @@ def start_new_session() -> None:
 def decide_approval(
     api_base_url: str,
     approval_id: str,
+    reviewer_id: str,
+    reviewer_role: str,
     approved: bool,
 ) -> None:
     """Submit a human decision for one approval request."""
@@ -89,6 +89,10 @@ def decide_approval(
         method="POST",
         url=f"{api_base_url}/approvals/{approval_id}/decision",
         json_data={"approved": approved},
+        headers={
+            "X-Reviewer-ID": reviewer_id,
+            "X-Reviewer-Role": reviewer_role,
+        },
     )
 
     status = data.get("status")
@@ -126,6 +130,16 @@ with st.sidebar:
         "会话 ID",
         value=st.session_state.session_id,
         disabled=True,
+    )
+
+    reviewer_id = st.text_input(
+        "审核者 ID",
+        value="admin-001",
+    )
+
+    reviewer_role = st.selectbox(
+        "审核者角色",
+        options=("admin", "reviewer"),
     )
 
     if st.button(
@@ -169,6 +183,8 @@ with st.sidebar:
                     api_base_url=api_base_url,
                     approval_id=pending_approval_id,
                     approved=True,
+                    reviewer_id=reviewer_id,
+                    reviewer_role=reviewer_role,
                 )
                 st.rerun()
             except RuntimeError as exc:
@@ -184,6 +200,8 @@ with st.sidebar:
                     api_base_url=api_base_url,
                     approval_id=pending_approval_id,
                     approved=False,
+                    reviewer_id=reviewer_id,
+                    reviewer_role=reviewer_role,
                 )
                 st.rerun()
             except RuntimeError as exc:

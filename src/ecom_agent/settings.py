@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     app_debug: bool = True
 
     database_url: str = "sqlite:///./data/ecommerce.db"
-
+    approval_reviewer_ids: str = "admin-001"
     qdrant_url: str = ""
     qdrant_path: str = "data/qdrant"
     qdrant_collection: str = "products"

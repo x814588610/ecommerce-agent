@@ -9,11 +9,18 @@ if (-not (Test-Path $Python)) {
     exit 1
 }
 
-Remove-Item Env:HTTP_PROXY -ErrorAction SilentlyContinue
-Remove-Item Env:HTTPS_PROXY -ErrorAction SilentlyContinue
-Remove-Item Env:ALL_PROXY -ErrorAction SilentlyContinue
+$ProxyUrl = $env:ECOM_AGENT_PROXY
 
-$env:NO_PROXY = "*"
+if ($ProxyUrl) {
+    $env:HTTP_PROXY = $ProxyUrl
+    $env:HTTPS_PROXY = $ProxyUrl
+    $env:NO_PROXY = "127.0.0.1,localhost"
+} else {
+    Remove-Item Env:HTTP_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:HTTPS_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:ALL_PROXY -ErrorAction SilentlyContinue
+    $env:NO_PROXY = "*"
+}
 $env:PYTHONUTF8 = "1"
 
 Set-Location $ProjectRoot
